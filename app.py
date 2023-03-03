@@ -12,8 +12,9 @@ from pyecharts.charts import Bar, Pie
 from pyecharts import options as opts
 from pyecharts.globals import ThemeType
 import streamlit_echarts
+import json
 
-
+DEFAULT_CONFIG_FILE='./config.json'
 def delete_goods(inventory, index):
     for i in index:
         inventory.delete(i['库存编号'])
@@ -47,7 +48,10 @@ def open_inventory(path):
         st.success("库存已打开 ✅")
     with st.spinner("更新饰品信息..."):
         progress_bar = st.progress(0)
-        rate = 1 / len(st.session_state.inventory())
+        if len(st.session_state.inventory())<=0:
+            rate=1
+        else:
+            rate = 1 / len(st.session_state.inventory())
         for p, i in enumerate(st.session_state.inventory):
             progress_bar.progress(rate * p)
             st.session_state.inventory()[i].refresh()
@@ -59,7 +63,18 @@ def save_inventory(path):
         st.session_state.inventory.save()
         st.success("库存保存成功 ✅")
 
-
+def update_token(path,token):
+    origin_data={}
+    try:
+        print(path)
+        origin_data=json.load(open(path,'r'))
+    except:
+        pass
+    origin_data['token']=token
+    json_object = json.dumps(origin_data, indent=4)
+    with open(path, "w+") as outfile:
+        outfile.write(json_object)
+    st.success("Token更新成功 ✅")
 cellsytle_jscode = JsCode(
     """
 function (params) {
@@ -78,6 +93,22 @@ function (params) {
     """
 )
 
+def export_table(path:str,data:pd.DataFrame):
+    try:
+        data.to_excel(path)
+        st.success("导出到%s成功✅"%path)
+    except:
+        st.success("导出%s失败，检查权限是否正常"%path)
+def import_from_file(path,token):
+    try:
+        data=pd.read_excel(path)
+        for i in range(data.shape[0]):
+            tmp = Goods(str(data.iloc[i]['Buff id']), int(data.iloc[i]['购入花费(元)']),token=token)
+            tmp.refresh()
+            st.session_state.inventory.add(tmp)
+            st.success(tmp.name + "已添加 ✅")
+    except:
+        st.error('检查%s中是否包含 <Buff id> <购入花费(元)>字段'%path)
 
 def main() -> None:
     st.header("CSGO 饰品投资追踪 :moneybag: :dollar: :bar_chart:")
@@ -88,7 +119,16 @@ def main() -> None:
         path = st.text_input("库存文件路径", value="./data/data.pkl")
         launch = st.button('新建或打开库存', on_click=open_inventory, args=(path,))
         save = st.button('保存库存更改', on_click=save_inventory, args=(path,))
+        config_path = st.text_input("token保存路径", value="./config.json")
+        try:
+            old_token=json.load(open(DEFAULT_CONFIG_FILE,'r+')).get('token')
+        except:
+            old_token='Bearer xxx'
+        token_value = st.text_input("token值", value=old_token)
+        token = st.button('更新悠悠有品token', on_click=update_token, args=(config_path,token_value))
         if 'inventory' in st.session_state:
+            import_file_path = st.text_input("已购列表路径", value='已购列表.xlsx')
+            import_bt = st.button('导入', on_click=import_from_file, args=(import_file_path,old_token))
             st.caption('目前已启动库存 ' + st.session_state.inventory.path)
             st.subheader("添加饰品")
             form_track = st.form(key="track")
@@ -99,7 +139,7 @@ def main() -> None:
             if submitted:
                 with st.spinner("加载饰品信息..."):
                     try:
-                        tmp = Goods(code, cost)
+                        tmp = Goods(code, cost,token=old_token)
                         tmp.refresh()
                         st.session_state.inventory.add(tmp)
                         st.success(tmp.name + "已添加 ✅")
@@ -107,6 +147,8 @@ def main() -> None:
                         st.error("饰品信息加载失败，请检查代码是否正确")
 
     if 'inventory' in st.session_state:
+        for good in st.session_state.inventory():
+            st.session_state.inventory()[good].token=old_token
         st.subheader("投资信息")
         if len(st.session_state.inventory()) > 0:
             col = st.columns(4)
@@ -261,7 +303,8 @@ def main() -> None:
                     xx.cost,
                     xx.sell_price,
                 ]
-
+            export_path = st.text_input("导出地址", value='./追踪列表.xlsx')
+            export = st.button('导出表格-追踪列表', on_click=export_table, args=(export_path,data))
             gb = GridOptionsBuilder.from_dataframe(data)
             gb.configure_columns(['购入花费(元)(双击修改)', '卖出价格'], editable=True)
             gb.configure_selection(
@@ -313,6 +356,7 @@ def main() -> None:
         goods = [st.session_state.inventory()[xx] for xx in st.session_state.inventory]
         # 已购列表
         st.subheader("已购列表")
+
         track = [xx for xx in goods if xx.cost != 0]
         if len(track) > 0:
             data_track = pd.DataFrame([xx() for xx in track])
@@ -345,8 +389,10 @@ def main() -> None:
                 'buff和有品价格比例',
             ]
             data_track = data_track.round(4)
-            del data_track['Buff id']
-            del data_track['有品 id']
+            #del data_track['Buff id']
+            #del data_track['有品 id']
+            export_path = st.text_input("导出地址", value='./已购列表.xlsx')
+            export = st.button('导出表格-已购列表', on_click=export_table, args=(export_path,data_track))
             gb0 = GridOptionsBuilder.from_dataframe(data_track)
             gb0.configure_columns(["Buff id", "有品 id", "名称"], pinned=True)
             gb0.configure_columns(

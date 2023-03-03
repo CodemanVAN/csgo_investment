@@ -3,10 +3,10 @@ import requests
 import json
 import pickle
 import os
-
+CONFIG_FILE='config.json'
 
 class Goods:
-    def __init__(self, goods_id, cost=0):
+    def __init__(self, goods_id, cost=0,token=''):
         self.index = 0
         self.id = goods_id  # buff id
         self.youpin_id = 0
@@ -17,7 +17,7 @@ class Goods:
         self.steam_price = 0  # steam当前价格
 
         self.status = 0  # 0:在库中 1:租出 2:卖出
-
+        self.token=token # youpin 登录token
         self.on_sale_count = 0  # youpin在售
         self.on_lease_count = 0  # youpin租出
         self.lease_unit_price = 0  # youpin短租金
@@ -59,20 +59,37 @@ class Goods:
             }
         )
         headers = {
-            'authority': 'api.youpin898.com',
-            'content-type': 'application/json;charset=UTF-8',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36 Edg/107.0.1418.42',
+            "accept": "application/json, text/plain, */*",
+            "accept-language": "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
+            "apptype": "1",
+            "authorization": self.token,
+            "content-type": "application/json",
+            "sec-ch-ua": "\"Chromium\";v=\"110\", \"Not A(Brand\";v=\"24\", \"Microsoft Edge\";v=\"110\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "same-site",
+            "Referer": "https://www.youpin898.com/",
+            "Referrer-Policy": "strict-origin-when-cross-origin"
         }
         response = requests.request("POST", url, headers=headers, data=payload).json()
-        self.youpin_id = response['Data'][0]['Id']
-        self.on_sale_count = response['Data'][0]["OnSaleCount"]  # youpin在售
-        self.on_lease_count = response['Data'][0]["OnLeaseCount"]  # youpin租出
-        self.lease_unit_price = eval(response['Data'][0]["LeaseUnitPrice"])  # youpin短租金
+        idx=0
+        while idx <len(response['Data']):
+            self.youpin_price = eval(response['Data'][idx]["Price"])  # youpin当前价格
+            if abs(self.youpin_price-self.price)/self.youpin_price>0.1:
+                idx+=1
+                continue
+            break
+        self.youpin_id = response['Data'][idx]['Id']
+        self.on_sale_count = response['Data'][idx]["OnSaleCount"]  # youpin在售
+        self.on_lease_count = response['Data'][idx]["OnLeaseCount"]  # youpin租出
+        self.lease_unit_price = eval(response['Data'][idx]["LeaseUnitPrice"])  # youpin短租金
         self.long_lease_unit_price = eval(
-            response['Data'][0]["LongLeaseUnitPrice"]
+            response['Data'][idx]["LongLeaseUnitPrice"]
         )  # youpin长租金
-        self.youpin_price = eval(response['Data'][0]["Price"])  # youpin当前价格
-        self.deposit = eval(response['Data'][0]["LeaseDeposit"])  # 押金
+        
+        self.deposit = eval(response['Data'][idx]["LeaseDeposit"])  # 押金
 
     def refresh(self):
         self.__get_buff()
@@ -267,5 +284,5 @@ class Inventory:
 
 
 if __name__ == "__main__":
-    g = Goods('759220', 22.5)
+    G=Goods(33912,1188,json.load(open(CONFIG_FILE,'r')).get('token'))
     print(g)
