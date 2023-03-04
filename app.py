@@ -211,46 +211,6 @@ def main() -> None:
                 value=f"{100 * (st.session_state.inventory.calc_yyyp_price() - st.session_state.inventory.total_cost_in_inventory())/st.session_state.inventory.total_cost_in_inventory():.2f} %",
                 help="( 持有饰品收益 - 库存内和已租出饰品总花费 ) * 100"
             )
-
-            # col[0].metric(
-            #     "总投资额", value=f"{st.session_state.inventory.total_cost():.2f} 元"
-            # )
-            # col[1].metric(
-            #     "库存理论收益(Buff计)",
-            #     value=f"{st.session_state.inventory.calc_buff_earn():.2f} 元",
-            # )
-            # col[2].metric(
-            #     "库存理论收益率(Buff计)",
-            #     value=f"{st.session_state.inventory.calc_buff_earn_rate():.2f} %",
-            # )
-            # col[3].metric(
-            #     "库存理论收益(悠悠有品计)",
-            #     value=f"{st.session_state.inventory.calc_youpin_earn():.2f} 元",
-            # )
-            # col2 = st.columns(4)
-            # col2[0].metric(
-            #     "库存理论收益率(悠悠有品计)",
-            #     value=f"{st.session_state.inventory.calc_youpin_earn_rate():.2f} %",
-            # )
-            # col2[1].metric("追踪总量", value=f"{len(st.session_state.inventory())} 件")
-            # col2[2].metric(
-            #     "库存价值(Buff计,含租出)",
-            #     value=f"{st.session_state.inventory.calc_price():.2f} 元",
-            # )
-            # col2[3].metric(
-            #     "总套现", value=f"{st.session_state.inventory.sell_price():.2f} 元"
-            # )
-            # col3 = st.columns(4)
-            # earn = (
-            #     st.session_state.inventory.calc_price()
-            #     + st.session_state.inventory.sell_price()
-            #     - st.session_state.inventory.total_cost()
-            # )
-            # col3[0].metric("盈利(库存价值+卖出收益-总投入)", value=f"{earn:.2f} 元")
-            # col3[1].metric(
-            #     "总收益率",
-            #     value=f"{earn/st.session_state.inventory.total_cost()*100:.2f} %",
-            # )
             st.subheader("目前资金组成")
             col4 = st.columns(2)
             with col4[0]:

@@ -3,4 +3,8 @@ api/__pycache__
 coverage/
 *.ipynb
 *.xlsx
+dist/
+build/
+csgo_invest-win32-x64/
 .vscode/
+config.json
