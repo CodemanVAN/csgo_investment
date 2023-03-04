@@ -7,4 +7,4 @@ dist/
 build/
 csgo_invest-win32-x64/
 .vscode/
-config.json
+*.pkl

@@ -1,7 +1,7 @@
 import functools
 from pathlib import Path
 
-from api import Goods, Inventory
+from api import Goods, Inventory, test_tokens
 import streamlit as st
 from st_aggrid import AgGrid
 from st_aggrid import DataReturnMode, GridUpdateMode
@@ -14,7 +14,8 @@ from pyecharts.globals import ThemeType
 import streamlit_echarts
 import json
 
-DEFAULT_CONFIG_FILE='./config.json'
+
+
 def delete_goods(inventory, index):
     for i in index:
         inventory.delete(i['库存编号'])
@@ -37,15 +38,17 @@ def back_goods(inventory, index):
         inventory()[i['库存编号']].back()
 
 
-def edit_cost(inventory, index, cost):
-    for index, i in enumerate(index):
-        inventory()[i].cost = cost[index]
-
 
 def open_inventory(path):
-    with st.spinner("加载库存中..."):
-        st.session_state.inventory = Inventory(path)
-        st.success("库存已打开 ✅")
+    if type(path) == str:
+        st.session_state.inventory=Inventory(path)
+        st.session_state.inventory.save()
+    else:
+        with st.spinner("加载库存中..."):
+            st.session_state.inventory = Inventory(path.name)
+            st.success("库存已打开 ✅")
+        with open(st.session_state.inventory.path,'wb+') as file:
+            file.write(path.getvalue())
     with st.spinner("更新饰品信息..."):
         progress_bar = st.progress(0)
         if len(st.session_state.inventory())<=0:
@@ -62,19 +65,21 @@ def save_inventory(path):
     with st.spinner("保存库存中..."):
         st.session_state.inventory.save()
         st.success("库存保存成功 ✅")
-
-def update_token(path,token):
-    origin_data={}
-    try:
-        print(path)
-        origin_data=json.load(open(path,'r'))
-    except:
-        pass
-    origin_data['token']=token
-    json_object = json.dumps(origin_data, indent=4)
-    with open(path, "w+") as outfile:
-        outfile.write(json_object)
-    st.success("Token更新成功 ✅")
+    with st.sidebar:
+        with open(st.session_state.inventory.path, 'rb') as f:
+            st.download_button('下载到本地', f, file_name=st.session_state.inventory.path)
+def update_token(token):
+    if not test_tokens(token):
+        st.error("Token无效，请重新登陆悠悠，按F12查找token，格式为 Bearer xxx")
+        return
+    USER_TOKEN=token
+    if 'inventory' in st.session_state:
+        for good in st.session_state.inventory():
+                st.session_state.inventory()[good].token=USER_TOKEN
+    st.success("Token更新成功,请及时保存！！✅")
+    
+    
+    
 cellsytle_jscode = JsCode(
     """
 function (params) {
@@ -93,15 +98,21 @@ function (params) {
     """
 )
 
-def export_table(path:str,data:pd.DataFrame):
-    try:
-        data.to_excel(path)
-        st.success("导出到%s成功✅"%path)
-    except:
-        st.success("导出%s失败，检查权限是否正常"%path)
 def import_from_file(path,token):
+    if not "inventory" in st.session_state:
+        st.error("请新建仓库在导入数据")
+        return
+    if not test_tokens(token):
+        st.error("悠悠token不正确")
+        return
     try:
-        data=pd.read_excel(path)
+        if path.name.endswith('.csv'):
+            data=pd.read_csv(path.getvalue())
+        elif path.name.endswith('.xlsx'):
+            data=pd.read_excel(path.getvalue())
+        else:
+             st.error('%s 文件类型不支持'%path.name)
+             return
         for i in range(data.shape[0]):
             tmp = Goods(str(data.iloc[i]['Buff id']), int(data.iloc[i]['购入花费(元)']),token=token)
             tmp.refresh()
@@ -111,24 +122,26 @@ def import_from_file(path,token):
         st.error('检查%s中是否包含 <Buff id> <购入花费(元)>字段'%path)
 
 def main() -> None:
+    global USER_TOKEN
     st.header("CSGO 饰品投资追踪 :moneybag: :dollar: :bar_chart:")
-    st.caption("Made by Shevon & Lishuai")
+    st.caption("Made by Shevon & Lishuai, maintained by whatcoldwind")
     st.text("请在左侧打开库存文件")
     with st.sidebar:
         st.subheader("选择库存")
-        path = st.text_input("库存文件路径", value="./data/data.pkl")
-        launch = st.button('新建或打开库存', on_click=open_inventory, args=(path,))
+        path = st.file_uploader("上传本地库存文件")
+        if path:
+            launch = st.button('打开库存', on_click=open_inventory, args=(path,))
+        new_name=st.text_input("输入新建库存的名称",value="xxxxx")
+        if new_name:
+            new_one = st.button('新建库存', on_click=open_inventory, args=(new_name+'.pkl',))
         save = st.button('保存库存更改', on_click=save_inventory, args=(path,))
-        config_path = st.text_input("token保存路径", value="./config.json")
-        try:
-            old_token=json.load(open(DEFAULT_CONFIG_FILE,'r+')).get('token')
-        except:
-            old_token='Bearer xxx'
-        token_value = st.text_input("token值", value=old_token)
-        token = st.button('更新悠悠有品token', on_click=update_token, args=(config_path,token_value))
+        token_value = st.text_input("token值", value=USER_TOKEN)
+        token = st.button('更新悠悠有品token', on_click=update_token, args=(token_value,))
+        
         if 'inventory' in st.session_state:
-            import_file_path = st.text_input("已购列表路径", value='已购列表.xlsx')
-            import_bt = st.button('导入', on_click=import_from_file, args=(import_file_path,old_token))
+            import_file_path = st.file_uploader("上传导出表格文件并导入到当前仓库 *.csv *.xlsx")
+            if import_file_path:
+                import_bt = st.button('导入', on_click=import_from_file, args=(import_file_path,USER_TOKEN))
             st.caption('目前已启动库存 ' + st.session_state.inventory.path)
             st.subheader("添加饰品")
             form_track = st.form(key="track")
@@ -139,16 +152,20 @@ def main() -> None:
             if submitted:
                 with st.spinner("加载饰品信息..."):
                     try:
-                        tmp = Goods(code, cost,token=old_token)
+                        tmp = Goods(code, cost,token=USER_TOKEN)
                         tmp.refresh()
                         st.session_state.inventory.add(tmp)
                         st.success(tmp.name + "已添加 ✅")
                     except:
-                        st.error("饰品信息加载失败，请检查代码是否正确")
+                        st.error("饰品信息加载失败，请检查代码和token是否正确")
 
     if 'inventory' in st.session_state:
         for good in st.session_state.inventory():
-            st.session_state.inventory()[good].token=old_token
+            validation=test_tokens(st.session_state.inventory()[good].token)
+            if validation :
+                USER_TOKEN=st.session_state.inventory()[good].token
+                st.success("✅ 你当前token有效：%s"%USER_TOKEN)
+                break
         st.subheader("投资信息")
         if len(st.session_state.inventory()) > 0:
             col = st.columns(4)
@@ -248,10 +265,10 @@ def main() -> None:
             st.caption("当前库存为空")
         # 追踪列表
         st.subheader("追踪列表")
-
+        st.text("右键表格可以导出表格")
         if len(st.session_state.inventory()) > 0:
             data = pd.DataFrame(
-                columns=['库存编号', 'Buff id', '名称', '状态', '购入花费(元)(双击修改)', '卖出价格']
+                columns=['库存编号', 'Buff id', '名称', '状态', '购入花费(元)', '卖出价格']
             )
             for xx in st.session_state.inventory:
                 xx = st.session_state.inventory()[xx]
@@ -263,10 +280,9 @@ def main() -> None:
                     xx.cost,
                     xx.sell_price,
                 ]
-            export_path = st.text_input("导出地址", value='./追踪列表.xlsx')
-            export = st.button('导出表格-追踪列表', on_click=export_table, args=(export_path,data))
+
             gb = GridOptionsBuilder.from_dataframe(data)
-            gb.configure_columns(['购入花费(元)(双击修改)', '卖出价格'], editable=True)
+
             gb.configure_selection(
                 selection_mode='multiple',
                 use_checkbox=True,
@@ -305,18 +321,13 @@ def main() -> None:
                     on_click=back_goods,
                     args=(st.session_state.inventory, selected),
                 )
-            edit_cost(
-                st.session_state.inventory,
-                list(grid['data']['库存编号']),
-                list(grid['data']['购入花费(元)(双击修改)']),
-            )
         else:
             st.caption("暂无饰品记录")
 
         goods = [st.session_state.inventory()[xx] for xx in st.session_state.inventory]
         # 已购列表
         st.subheader("已购列表")
-
+        st.text("右键表格可以导出表格")
         track = [xx for xx in goods if xx.cost != 0]
         if len(track) > 0:
             data_track = pd.DataFrame([xx() for xx in track])
@@ -351,8 +362,6 @@ def main() -> None:
             data_track = data_track.round(4)
             #del data_track['Buff id']
             #del data_track['有品 id']
-            export_path = st.text_input("导出地址", value='./已购列表.xlsx')
-            export = st.button('导出表格-已购列表', on_click=export_table, args=(export_path,data_track))
             gb0 = GridOptionsBuilder.from_dataframe(data_track)
             gb0.configure_columns(["Buff id", "有品 id", "名称"], pinned=True)
             gb0.configure_columns(
@@ -461,4 +470,5 @@ if __name__ == "__main__":
         "💰",
         layout="wide",
     )
+    USER_TOKEN="Bearer xxx"
     main()

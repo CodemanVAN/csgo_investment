@@ -3,7 +3,6 @@ import requests
 import json
 import pickle
 import os
-CONFIG_FILE='config.json'
 
 class Goods:
     def __init__(self, goods_id, cost=0,token=''):
@@ -283,6 +282,10 @@ class Inventory:
         ) 
 
 
-if __name__ == "__main__":
-    G=Goods(33912,1188,json.load(open(CONFIG_FILE,'r')).get('token'))
-    print(g)
+def test_tokens(token):
+    try:
+        tmp = Goods('33912','1188',token)
+        tmp.refresh()
+        return True
+    except:
+        return False
