@@ -127,7 +127,7 @@ def import_from_file(path, token):
 
 def main() -> None:
 
-    st.header("CSGO 饰品投资追踪 :moneybag: :dollar: :bar_chart:")
+    st.header("CSGO 饰品投资追踪 V1.0 -> https://space.bilibili.com/36333545 :moneybag: :dollar: :bar_chart:")
     st.caption("Made by Shevon & Lishuai, maintained by whatcoldwind")
     st.text("请在左侧打开库存文件")
     with st.sidebar:
@@ -566,7 +566,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     st.set_page_config(
-        "CSGO 饰品投资追踪",
+        r"CSGO 饰品投资追踪",
         "💰",
         layout="wide",
     )
