@@ -15,49 +15,50 @@ import streamlit_echarts
 import json
 
 
-
 def delete_goods(inventory, index):
     for i in index:
         inventory.delete(i['库存编号'])
 
 
-def sell_goods(inventory, index):
+def sell_goods(inventory, index,sell_price):
     for i in index:
         try:
-            inventory()[i['库存编号']].sell(eval(i['卖出价格']))
+            inventory()[i['库存编号']].sell(sell_price)
         except:
             st.error("卖出价格输入错误，请检查输入")
 
-def lease_goods(inventory, index):
-    for i in index:
-        inventory()[i['库存编号']].lease()
 
+def lease_goods(inventory, index, day):
+    for i in index:
+        inventory()[i['库存编号']].lease(day)
 
 def back_goods(inventory, index):
     for i in index:
         inventory()[i['库存编号']].back()
 
 
-
 def open_inventory(path):
-    if type(path) == str:
-        st.session_state.inventory=Inventory(path)
-        st.session_state.inventory.save()
-    else:
-        with st.spinner("加载库存中..."):
+    with st.spinner("加载库存中..."):
+        if type(path) == str:
+            st.session_state.inventory = Inventory(path)
+            st.session_state.inventory.save()
+        else:
             st.session_state.inventory = Inventory(path.name)
-            st.success("库存已打开 ✅")
-        with open(st.session_state.inventory.path,'wb+') as file:
-            file.write(path.getvalue())
+            with open(st.session_state.inventory.path, 'wb+') as file:
+                file.write(path.getvalue())
+        st.success("库存已打开 ✅")
     with st.spinner("更新饰品信息..."):
         progress_bar = st.progress(0)
-        if len(st.session_state.inventory())<=0:
-            rate=1
+        if len(st.session_state.inventory()) <= 0:
+            rate = 1
         else:
             rate = 1 / len(st.session_state.inventory())
         for p, i in enumerate(st.session_state.inventory):
             progress_bar.progress(rate * p)
-            st.session_state.inventory()[i].refresh()
+            try:
+                st.session_state.inventory()[i].refresh()
+            except:
+                st.error("%s Buff id：%s 刷新失败，可能是token过期了，或者稍后重试或手动添加"%(st.session_state.inventory()[i].naem,st.session_state.inventory()[i].buff_id))
         progress_bar.empty()
 
 
@@ -67,19 +68,22 @@ def save_inventory(path):
         st.success("库存保存成功 ✅")
     with st.sidebar:
         with open(st.session_state.inventory.path, 'rb') as f:
-            st.download_button('下载到本地', f, file_name=st.session_state.inventory.path)
+            st.download_button(
+                '下载到本地', f, file_name=st.session_state.inventory.path)
+
+
 def update_token(token):
     if not test_tokens(token):
         st.error("Token无效，请重新登陆悠悠，按F12查找token，格式为 Bearer xxx")
         return
-    USER_TOKEN=token
+    st.session_state.USER_TOKEN['token'] = token
     if 'inventory' in st.session_state:
         for good in st.session_state.inventory():
-                st.session_state.inventory()[good].token=USER_TOKEN
-    st.success("Token更新成功,请及时保存！！✅")
-    
-    
-    
+            st.session_state.inventory(
+            )[good].token = st.session_state.USER_TOKEN['token']
+    st.success("Token更新成功,请及时保存！！✅ %s" % st.session_state.USER_TOKEN['token'])
+
+
 cellsytle_jscode = JsCode(
     """
 function (params) {
@@ -98,31 +102,31 @@ function (params) {
     """
 )
 
-def import_from_file(path,token):
+
+def import_from_file(path, token):
     if not "inventory" in st.session_state:
         st.error("请新建仓库在导入数据")
         return
-    if not test_tokens(token):
-        st.error("悠悠token不正确")
-        return
     try:
         if path.name.endswith('.csv'):
-            data=pd.read_csv(path.getvalue())
+            data = pd.read_csv(path.getvalue())
         elif path.name.endswith('.xlsx'):
-            data=pd.read_excel(path.getvalue())
+            data = pd.read_excel(path.getvalue())
         else:
-             st.error('%s 文件类型不支持'%path.name)
-             return
+            st.error('%s 文件类型不支持' % path.name)
+            return
         for i in range(data.shape[0]):
-            tmp = Goods(str(data.iloc[i]['Buff id']), int(data.iloc[i]['购入花费(元)']),token=token)
+            tmp = Goods(str(data.iloc[i]['Buff id']), int(
+                data.iloc[i]['购入花费(元)']), token=token)
             tmp.refresh()
             st.session_state.inventory.add(tmp)
             st.success(tmp.name + "已添加 ✅")
     except:
-        st.error('检查%s中是否包含 <Buff id> <购入花费(元)>字段'%path)
+        st.error('检查%s中是否包含 <Buff id> <购入花费(元)>字段' % path)
+
 
 def main() -> None:
-    global USER_TOKEN
+
     st.header("CSGO 饰品投资追踪 :moneybag: :dollar: :bar_chart:")
     st.caption("Made by Shevon & Lishuai, maintained by whatcoldwind")
     st.text("请在左侧打开库存文件")
@@ -131,17 +135,41 @@ def main() -> None:
         path = st.file_uploader("上传本地库存文件")
         if path:
             launch = st.button('打开库存', on_click=open_inventory, args=(path,))
-        new_name=st.text_input("输入新建库存的名称",value="xxxxx")
+        new_name = st.text_input("输入新建库存的名称", value="xxxxx")
         if new_name:
-            new_one = st.button('新建库存', on_click=open_inventory, args=(new_name+'.pkl',))
+            new_one = st.button(
+                '新建库存', on_click=open_inventory, args=(new_name+'.pkl',))
         save = st.button('保存库存更改', on_click=save_inventory, args=(path,))
-        token_value = st.text_input("token值", value=USER_TOKEN)
-        token = st.button('更新悠悠有品token', on_click=update_token, args=(token_value,))
-        
+        st.subheader("个人设置")
+        token_value = st.text_input(
+            "token值", value=st.session_state.USER_TOKEN['token'])
+        token = st.button(
+            '更新悠悠有品token', on_click=update_token, args=(token_value,))
+        rate_set = st.columns(2)
+        rate_set2 = st.columns(2)
+        with rate_set[0]:
+            BUFF_OUT_FEE_RATE = 1 - \
+                st.number_input("BUFF提现手续费-%", min_value=0.0,
+                                max_value=100.0, value=1.0)/100
+        with rate_set[1]:
+            BUFF_SELL_FEE_RATE = 1 - \
+                st.number_input("BUFF卖出手续费-%", min_value=0.0,
+                                max_value=100.0, value=2.5)/100
+        with rate_set2[0]:
+            YY_OUT_FEE_RATE = 1 - \
+                st.number_input("悠悠提现手续费-%", min_value=0.0,
+                                max_value=100.0, value=1.0)/100
+        with rate_set2[1]:
+            YY_SELL_FEE_RATE = 1 - \
+                st.number_input("悠悠卖出手续费-%", min_value=0.0,
+                                max_value=100.0, value=0.0)/100
+
         if 'inventory' in st.session_state:
-            import_file_path = st.file_uploader("上传导出表格文件并导入到当前仓库 *.csv *.xlsx")
+            import_file_path = st.file_uploader(
+                "上传导出表格文件并导入到当前仓库 *.csv *.xlsx")
             if import_file_path:
-                import_bt = st.button('导入', on_click=import_from_file, args=(import_file_path,USER_TOKEN))
+                import_bt = st.button('导入', on_click=import_from_file, args=(
+                    import_file_path, token_value))
             st.caption('目前已启动库存 ' + st.session_state.inventory.path)
             st.subheader("添加饰品")
             form_track = st.form(key="track")
@@ -152,7 +180,8 @@ def main() -> None:
             if submitted:
                 with st.spinner("加载饰品信息..."):
                     try:
-                        tmp = Goods(code, cost,token=USER_TOKEN)
+                        tmp = Goods(
+                            code, cost, token=st.session_state.USER_TOKEN['token'])
                         tmp.refresh()
                         st.session_state.inventory.add(tmp)
                         st.success(tmp.name + "已添加 ✅")
@@ -160,33 +189,38 @@ def main() -> None:
                         st.error("饰品信息加载失败，请检查代码和token是否正确")
 
     if 'inventory' in st.session_state:
-        for good in st.session_state.inventory():
-            validation=test_tokens(st.session_state.inventory()[good].token)
-            if validation :
-                USER_TOKEN=st.session_state.inventory()[good].token
-                st.success("✅ 你当前token有效：%s"%USER_TOKEN)
-                break
         st.subheader("投资信息")
         if len(st.session_state.inventory()) > 0:
-            col = st.columns(4)
+            col = st.columns([2,1,3,2,2])
             col2 = st.columns(4)
             col3 = st.columns(4)
+            rent_earn = st.session_state.inventory.calc_rent_earn()
+            buff_cash = st.session_state.inventory.calc_price()*BUFF_OUT_FEE_RATE * \
+                BUFF_SELL_FEE_RATE
+            yyyp_cash = st.session_state.inventory.calc_yyyp_price()*YY_OUT_FEE_RATE * \
+                YY_SELL_FEE_RATE
+
             col[0].metric(
                 "总投资额", value=f"{st.session_state.inventory.total_cost():.2f} 元",
                 help="购买饰品总花费"
             )
-            col[1].metric("追踪总量", value=f"{len(st.session_state.inventory())} 件",help="加入库存文件的饰品数量")
+            col[1].metric(
+                "追踪总量", value=f"{len(st.session_state.inventory())} 件", help="加入库存文件的饰品数量")
             col[2].metric(
-                "库存价值(Buff计,含租出)",
-                value=f"{st.session_state.inventory.calc_price():.2f} 元",
+                "库存价值",
+                value=f"BF:{buff_cash:.1f} 元|YY:{yyyp_cash:.1f} 元",
                 help="库存饰品和已租出饰品总价值"
             )
             col[3].metric(
-                "总套现", value=f"{st.session_state.inventory.sell_price():.2f} 元",
-                help="卖出饰品总收入"
+                "租金收益", value=f"{rent_earn:.2f} 元",
+                help="所有饰品出租获得的收益"
+            )
+            col[4].metric(
+                "总套现(扣除了手续费BUFF计)", value=f"{st.session_state.inventory.sell_price()*BUFF_OUT_FEE_RATE:.2f} 元",
+                help="真正的收益，到卡里的！"
             )
             earn = (
-                st.session_state.inventory.calc_price()
+                buff_cash
                 + st.session_state.inventory.sell_price()
                 - st.session_state.inventory.total_cost()
             )
@@ -195,10 +229,10 @@ def main() -> None:
             col2[1].metric(
                 "总收益率",
                 value=f"{earn/st.session_state.inventory.total_cost()*100:.2f} %",
-                help="盈利 / 总投资额 * 100"            
+                help="盈利 / 总投资额 * 100"
             )
             yyyp_earn = (
-                st.session_state.inventory.calc_yyyp_price()
+                yyyp_cash
                 + st.session_state.inventory.sell_price()
                 - st.session_state.inventory.total_cost()
             )
@@ -210,57 +244,75 @@ def main() -> None:
             )
             col3[0].metric(
                 "持有饰品收益(Buff计)",
-                value=f"{st.session_state.inventory.calc_price() - st.session_state.inventory.total_cost_in_inventory():.2f} 元",
+                value=f"{buff_cash - st.session_state.inventory.total_cost_in_inventory():.2f} 元",
                 help="库存价值 - 库存内和已租出饰品总花费"
             )
-            col3[1].metric(
-                "持有饰品收益率(Buff计)",
-                value=f"{100 * (st.session_state.inventory.calc_price() - st.session_state.inventory.total_cost_in_inventory())/st.session_state.inventory.total_cost_in_inventory():.2f} %",
-                help="( 持有饰品收益 - 库存内和已租出饰品总花费 ) * 100"
-            )
+            if st.session_state.inventory.total_cost_in_inventory()!=0:
+                col3[1].metric(
+                    "持有饰品收益率(Buff计)",
+                    value=f"{100 * (buff_cash - st.session_state.inventory.total_cost_in_inventory())/st.session_state.inventory.total_cost_in_inventory():.2f} %",
+                    help="( 持有饰品收益 - 库存内和已租出饰品总花费 ) * 100"
+                )
+            else:
+                col3[1].metric(
+                    "持有饰品收益率(Buff计)",
+                    value=f"你清仓了",
+                    help="( 持有饰品收益 - 库存内和已租出饰品总花费 ) * 100"
+                )
             col3[2].metric(
                 "持有饰品收益(悠悠有品计)",
-                value=f"{st.session_state.inventory.calc_yyyp_price() - st.session_state.inventory.total_cost_in_inventory():.2f} 元",
+                value=f"{yyyp_cash - st.session_state.inventory.total_cost_in_inventory():.2f} 元",
                 help="库存价值 - 库存内和已租出饰品总花费"
             )
-            col3[3].metric(
+            if st.session_state.inventory.total_cost_in_inventory()!=0:
+                col3[3].metric(
                 "持有饰品收益率(悠悠有品计)",
-                value=f"{100 * (st.session_state.inventory.calc_yyyp_price() - st.session_state.inventory.total_cost_in_inventory())/st.session_state.inventory.total_cost_in_inventory():.2f} %",
+                value=f"{100 * (yyyp_cash - st.session_state.inventory.total_cost_in_inventory())/st.session_state.inventory.total_cost_in_inventory():.2f} %",
                 help="( 持有饰品收益 - 库存内和已租出饰品总花费 ) * 100"
             )
+            else:
+                col3[3].metric(
+                "持有饰品收益率(悠悠有品计)",
+                value=f"你清仓了",
+                help="( 持有饰品收益 - 库存内和已租出饰品总花费 ) * 100"
+            )
+
             st.subheader("目前资金组成")
             col4 = st.columns(2)
             with col4[0]:
                 fig1 = Pie(init_opts=opts.InitOpts(theme=ThemeType.MACARONS)).add(
                     "库存资金组成",
-                    [('出租',sum(
-                            [
-                                st.session_state.inventory()[good].price
-                                for good in st.session_state.inventory()
-                                if st.session_state.inventory()[good].status == 1
-                            ]
-                        )), 
-                     ('在库',sum(
-                            [
-                                st.session_state.inventory()[good].price
-                                for good in st.session_state.inventory()
-                                if (
-                                    st.session_state.inventory()[good].status == 0
-                                    and st.session_state.inventory()[good].cost != 0
-                                )
-                            ]
-                        ))],
+                    [('出租', sum(
+                        [
+                            st.session_state.inventory()[good].price
+                            for good in st.session_state.inventory()
+                            if st.session_state.inventory()[good].status == 1
+                        ]
+                    )),
+                        ('在库', sum(
+                         [
+                             st.session_state.inventory()[good].price
+                             for good in st.session_state.inventory()
+                             if (
+                                 st.session_state.inventory()[
+                                     good].status == 0
+                                 and st.session_state.inventory()[good].cost != 0
+                             )
+                         ]
+                         ))],
                     radius=["30%", "75%"],
                 )
-                streamlit_echarts.st_pyecharts(fig1, height="400px", key="fig1")
+                streamlit_echarts.st_pyecharts(
+                    fig1, height="400px", key="fig1")
             with col4[1]:
                 fig2 = Pie(init_opts=opts.InitOpts(theme=ThemeType.MACARONS)).add(
                     "盈利资金组成",
-                    [('库存增值',st.session_state.inventory.calc_price()
-                        - st.session_state.inventory.total_cost_in_inventory(),), ('卖出收益',st.session_state.inventory.sell_earn(),)],
+                    [('库存增值', st.session_state.inventory.calc_price()
+                        - st.session_state.inventory.total_cost_in_inventory(),), ('卖出收益', st.session_state.inventory.sell_earn(),), ('租金收益', st.session_state.inventory.calc_rent_earn(),)],
                     radius=["30%", "75%"],
                 )
-                streamlit_echarts.st_pyecharts(fig2, height="400px", key="fig2")
+                streamlit_echarts.st_pyecharts(
+                    fig2, height="400px", key="fig2")
         else:
             st.caption("当前库存为空")
         # 追踪列表
@@ -300,31 +352,40 @@ def main() -> None:
             )
             selected = grid["selected_rows"]
             if selected != []:
-                print(selected)
-                st.button(
-                    '删除选中饰品',
-                    on_click=delete_goods,
-                    args=(st.session_state.inventory, selected),
-                )
-                st.button(
-                    '出售选中饰品',
-                    on_click=sell_goods,
-                    args=(st.session_state.inventory, selected),
-                )
-                st.button(
-                    '租出选中饰品',
-                    on_click=lease_goods,
-                    args=(st.session_state.inventory, selected),
-                )
-                st.button(
-                    '回仓选中饰品',
-                    on_click=back_goods,
-                    args=(st.session_state.inventory, selected),
-                )
+                operations = st.columns(4)
+                with operations[0]:
+                    
+                    st.button(
+                        '删除选中饰品',
+                        on_click=delete_goods,
+                        args=(st.session_state.inventory, selected),
+                    )
+                with operations[1]:
+                    sell_price = st.number_input('卖出价格，实际到手的',min_value=0.0,max_value=9999999.0)
+                    st.button(
+                        '出售选中饰品',
+                        on_click=sell_goods,
+                        args=(st.session_state.inventory, selected,sell_price,),
+                    )
+                with operations[2]:
+                    rent_day = st.number_input('出租天数',min_value=0,max_value=9999999)
+                    st.button(
+                        '租出选中饰品',
+                        on_click=lease_goods,
+                        args=(st.session_state.inventory,
+                              selected, rent_day,),
+                    )
+                with operations[3]:
+                    st.button(
+                        '回仓选中饰品',
+                        on_click=back_goods,
+                        args=(st.session_state.inventory, selected),
+                    )
         else:
             st.caption("暂无饰品记录")
 
-        goods = [st.session_state.inventory()[xx] for xx in st.session_state.inventory]
+        goods = [st.session_state.inventory()[xx]
+                 for xx in st.session_state.inventory]
         # 已购列表
         st.subheader("已购列表")
         st.text("右键表格可以导出表格")
@@ -334,7 +395,6 @@ def main() -> None:
             data_track['Status'] = data_track['Status'].map(
                 {0: '在库中', 1: '已租出', 2: '已卖出'}
             )
-
             data_track.columns = [
                 'Buff id',
                 '有品 id',
@@ -357,13 +417,15 @@ def main() -> None:
                 '年化短租比例(%)',
                 '年化长租比例(%)',
                 '套现比例(%)',
-                'buff和有品价格比例',
+                "总出租收益(元)",
+                '总出租天数(天)',
+                '归还日期'
             ]
             data_track = data_track.round(4)
             #del data_track['Buff id']
             #del data_track['有品 id']
             gb0 = GridOptionsBuilder.from_dataframe(data_track)
-            gb0.configure_columns(["Buff id", "有品 id", "名称"], pinned=True)
+            gb0.configure_columns(["名称"], pinned=True)
             gb0.configure_columns(
                 ['理论目前收益(元)', '理论目前收益率(%)'],
                 cellStyle=cellsytle_jscode,
@@ -389,17 +451,21 @@ def main() -> None:
             y2 = data_track.sort_values(
                 by='理论目前收益率(%)',
             )['理论目前收益(元)'].tolist()
+            y3 = data_track.sort_values(
+                by='理论目前收益(元)',)['总出租收益(元)'].tolist()
             fig0 = (
                 Bar(init_opts=opts.InitOpts(theme=ThemeType.MACARONS))
                 .add_xaxis(x)
                 .add_yaxis("理论目前收益率(%)", y1)
                 .add_yaxis("理论目前收益(元)", y2)
+                .add_yaxis("总出租收益(元)", y3)
                 .reversal_axis()
                 .set_global_opts(
                     # 设置操作图表缩放功能，orient="vertical" 为Y轴 滑动
                     datazoom_opts=[
                         opts.DataZoomOpts(),
-                        opts.DataZoomOpts(type_="inside", range_start=0, range_end=100),
+                        opts.DataZoomOpts(
+                            type_="inside", range_start=0, range_end=100),
                         opts.DataZoomOpts(
                             orient="vertical",
                             range_start=0,
@@ -409,8 +475,44 @@ def main() -> None:
                 )
                 # .render("bar_datazoom_both.html")
             )
-
             streamlit_echarts.st_pyecharts(fig0, height="900px", key="fig0")
+            track = [xx for xx in goods if xx.status == 2]
+            y1=[]
+            y2=[]
+            y3=[]
+            x=[]
+            xx=[]
+            for good in track:
+                xx.append([(good.sell_price-good.cost+good.rent_earn)/good.cost,good.name,good.sell_price-good.cost+good.rent_earn,good.rent_earn])
+            for i in sorted(xx):
+                x.append(i[1])
+                y1.append(i[0]*100)
+                y2.append(i[2])
+                y3.append(i[3])
+            fig3 = (
+                Bar(init_opts=opts.InitOpts(theme=ThemeType.MACARONS))
+                .add_xaxis(x)
+                .add_yaxis("实际收益率(%)", y1)
+                .add_yaxis("实际目前收益(元)", y2)
+                .add_yaxis("总出租收益(元)", y3)
+                .reversal_axis()
+                .set_global_opts(
+                    # 设置操作图表缩放功能，orient="vertical" 为Y轴 滑动
+                    datazoom_opts=[
+                        opts.DataZoomOpts(),
+                        opts.DataZoomOpts(
+                            type_="inside", range_start=0, range_end=100),
+                        opts.DataZoomOpts(
+                            orient="vertical",
+                            range_start=0,
+                            range_end=100,
+                        ),
+                    ],
+                )
+                # .render("bar_datazoom_both.html")
+            )
+            
+            streamlit_echarts.st_pyecharts(fig3, height="900px", key="fig3")
 
         else:
             st.caption("暂无已购饰品")
@@ -442,7 +544,6 @@ def main() -> None:
                 '年化短租比例(%)',
                 '年化长租比例(%)',
                 '套现比例(%)',
-                'buff和有品价格比例',
             ]
             data_observe = data_observe.round(4)
             del data_observe['Buff id']
@@ -459,7 +560,6 @@ def main() -> None:
                 allow_unsafe_jscode=True,
                 enable_enterprise_modules=True,
             )
-
         else:
             st.caption("暂无观望饰品")
 
@@ -470,5 +570,5 @@ if __name__ == "__main__":
         "💰",
         layout="wide",
     )
-    USER_TOKEN="Bearer xxx"
+    st.session_state.USER_TOKEN = {'token': "Bearer xxx"}
     main()

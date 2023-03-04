@@ -3,9 +3,11 @@ import requests
 import json
 import pickle
 import os
+import datetime
+
 
 class Goods:
-    def __init__(self, goods_id, cost=0,token=''):
+    def __init__(self, goods_id, cost=0, token=''):
         self.index = 0
         self.id = goods_id  # buff id
         self.youpin_id = 0
@@ -15,8 +17,11 @@ class Goods:
         self.price = 0  # buff当前价格
         self.steam_price = 0  # steam当前价格
 
+        self.rent_day = 0
+        self.rent_return_date = datetime.datetime.today()
+        self.rent_earn = 0
         self.status = 0  # 0:在库中 1:租出 2:卖出
-        self.token=token # youpin 登录token
+        self.token = token  # youpin 登录token
         self.on_sale_count = 0  # youpin在售
         self.on_lease_count = 0  # youpin租出
         self.lease_unit_price = 0  # youpin短租金
@@ -72,22 +77,31 @@ class Goods:
             "Referer": "https://www.youpin898.com/",
             "Referrer-Policy": "strict-origin-when-cross-origin"
         }
-        response = requests.request("POST", url, headers=headers, data=payload).json()
-        idx=0
-        while idx <len(response['Data']):
-            self.youpin_price = eval(response['Data'][idx]["Price"])  # youpin当前价格
-            if abs(self.youpin_price-self.price)/self.youpin_price>0.1:
-                idx+=1
-                continue
-            break
+        response = requests.request(
+            "POST", url, headers=headers, data=payload).json()
+        idx = 0
+        
+
+        self.youpin_price = float(response['Data'][idx]["Price"])  # youpin当前价格
+        while self.youpin_price-self.price > self.youpin_price*10 and len(response['Data'])>1:
+            idx+=1
+            if idx >= len(response['Data'])-1:break
+        self.youpin_price = float(response['Data'][idx]["Price"])  # youpin当前价格
+        """
+        print('--------------------------------')
+        print(self.name,self.youpin_price, len(response['Data']))
+        print('--------------------------------')
+        """
+        idx=min(idx,len(response['Data'])-1)
         self.youpin_id = response['Data'][idx]['Id']
         self.on_sale_count = response['Data'][idx]["OnSaleCount"]  # youpin在售
         self.on_lease_count = response['Data'][idx]["OnLeaseCount"]  # youpin租出
-        self.lease_unit_price = eval(response['Data'][idx]["LeaseUnitPrice"])  # youpin短租金
+        self.lease_unit_price = eval(
+            response['Data'][idx]["LeaseUnitPrice"])  # youpin短租金
         self.long_lease_unit_price = eval(
             response['Data'][idx]["LongLeaseUnitPrice"]
         )  # youpin长租金
-        
+
         self.deposit = eval(response['Data'][idx]["LeaseDeposit"])  # 押金
 
     def refresh(self):
@@ -98,10 +112,17 @@ class Goods:
         self.status = 2
         self.sell_price = price
 
-    def lease(self):
+    def lease(self, day):
+        self.rent_day += day
+        if day >= 22:
+            self.rent_earn += day*self.long_lease_unit_price
+        else:
+            self.rent_earn += day*self.lease_unit_price
+        self.rent_return_date = datetime.datetime.today()+datetime.timedelta(day)
         self.status = 1
 
     def back(self):
+        self.rent_return_date = datetime.datetime.today()
         self.status = 0
 
     def get_status(self):
@@ -142,7 +163,6 @@ class Goods:
                 / self.price
                 * 100,  # 年化长租比例
                 "CashRatio": self.price / self.steam_price * 100,  # 套现比例
-                "BuffYouyouRatio": self.price / self.youpin_price,  # buff和有品价格比例
             }
         else:
             return {
@@ -160,8 +180,8 @@ class Goods:
                 "LongLeaseUnitPrice": self.long_lease_unit_price,
                 "Deposit": self.deposit,
                 "RentSaleRatio": self.on_lease_count / self.on_sale_count,  # 目前租售比
-                "TheoreticalCurrentEarnings": self.price - self.cost,  # 理论目前收益
-                "TheoreticalCurrentEarningsRate": (self.price - self.cost)
+                "TheoreticalCurrentEarnings": self.price-self.cost+self.rent_earn,  # 理论目前收益
+                "TheoreticalCurrentEarningsRate": (self.price - self.cost + self.rent_earn)
                 / self.cost
                 * 100,  # 理论目前收益率
                 "LeaseRatio": self.lease_unit_price / self.price * 100,  # 租金比例
@@ -175,7 +195,9 @@ class Goods:
                 / self.price
                 * 100,  # 年化长租比例
                 "CashRatio": self.price / self.steam_price * 100,  # 套现比例
-                "BuffYouyouRatio": self.price / self.youpin_price,  # buff和有品价格比例
+                "Rentearn": self.rent_earn,  # 总出租收益
+                "TotalRentDay": self.rent_day,  # 总出租天数
+                "ReturnDay": self.rent_return_date,  # 归还日期
             }
 
 
@@ -225,6 +247,19 @@ class Inventory:
             ]
         )
 
+    def calc_rent_earn(self):
+        return sum(
+            [
+                self()[good].rent_earn
+                for good in self()
+            ]
+        )
+    def cala_sell_earn(self):
+        return sum([
+                self()[good].sell_price - self()[good].cost
+                for good in self()
+                if (self()[good].cost != 0 and self()[good].status == 2)
+            ])
     def calc_buff_earn(self):
         return sum(
             [
@@ -232,7 +267,7 @@ class Inventory:
                 for good in self()
                 if (self()[good].cost != 0 & self()[good].status == 0) or self()[good].status == 1
             ]
-        )
+        )+self.cala_sell_earn()
 
     def calc_youpin_earn(self):
         return sum(
@@ -241,7 +276,7 @@ class Inventory:
                 for good in self()
                 if (self()[good].cost != 0 & self()[good].status == 0) or self()[good].status == 1
             ]
-        )
+        )+self.cala_sell_earn()
 
     def calc_buff_earn_rate(self):
         return self.calc_buff_earn() / self.total_cost_in_inventory() * 100
@@ -271,21 +306,20 @@ class Inventory:
 
     def sell_earn(self):
         return sum(
-            [self()[good].sell_price for good in self() if self()[good].status == 2]
+            [self()[good].sell_price+self()[good].rent_earn for good in self() if self()[good].status == 2]
         ) - sum(
             [self()[good].cost for good in self() if self()[good].status == 2]
         )
 
     def sell_price(self):
         return sum(
-            [self()[good].sell_price for good in self() if self()[good].status == 2]
-        ) 
+            [self()[good].sell_price+self()[good].rent_earn for good in self() if self()[good].status == 2]
+        )
 
 
 def test_tokens(token):
     try:
-        tmp = Goods('33912','1188',token)
-        tmp.refresh()
+        tmp = Goods('33912', '1188', token)
         return True
     except:
         return False
