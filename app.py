@@ -181,7 +181,7 @@ def main() -> None:
                 with st.spinner("加载饰品信息..."):
                     try:
                         tmp = Goods(
-                            code, cost, token=st.session_state.USER_TOKEN['token'])
+                            code, cost, token=token_value)
                         tmp.refresh()
                         st.session_state.inventory.add(tmp)
                         st.success(tmp.name + "已添加 ✅")
