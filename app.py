@@ -28,9 +28,9 @@ def sell_goods(inventory, index,sell_price):
             st.error("卖出价格输入错误，请检查输入")
 
 
-def lease_goods(inventory, index, day):
+def lease_goods(inventory, index, day,profit):
     for i in index:
-        inventory()[i['库存编号']].lease(day)
+        inventory()[i['库存编号']].lease(day,profit)
 
 def back_goods(inventory, index):
     for i in index:
@@ -352,6 +352,7 @@ def main() -> None:
             )
             selected = grid["selected_rows"]
             if selected != []:
+                #print(selected)
                 operations = st.columns(4)
                 with operations[0]:
                     
@@ -368,12 +369,13 @@ def main() -> None:
                         args=(st.session_state.inventory, selected,sell_price,),
                     )
                 with operations[2]:
-                    rent_day = st.number_input('出租天数',min_value=0,max_value=9999999)
+                    rent_day= st.number_input('出租天数',min_value=0,max_value=9999999)
+                    rent_profit = st.number_input('出租收益',min_value=0.0,max_value=9999999.0)
                     st.button(
                         '租出选中饰品',
                         on_click=lease_goods,
                         args=(st.session_state.inventory,
-                              selected, rent_day,),
+                              selected,rent_day, rent_profit,),
                     )
                 with operations[3]:
                     st.button(
@@ -452,7 +454,8 @@ def main() -> None:
                 by='理论目前收益率(%)',
             )['理论目前收益(元)'].tolist()
             y3 = data_track.sort_values(
-                by='理论目前收益(元)',)['总出租收益(元)'].tolist()
+                by='理论目前收益率(%)',
+                )['总出租收益(元)'].tolist()
             fig0 = (
                 Bar(init_opts=opts.InitOpts(theme=ThemeType.MACARONS))
                 .add_xaxis(x)

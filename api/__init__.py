@@ -112,12 +112,9 @@ class Goods:
         self.status = 2
         self.sell_price = price
 
-    def lease(self, day):
+    def lease(self, day,profit):
         self.rent_day += day
-        if day >= 22:
-            self.rent_earn += day*self.long_lease_unit_price
-        else:
-            self.rent_earn += day*self.lease_unit_price
+        self.rent_earn += profit
         self.rent_return_date = datetime.datetime.today()+datetime.timedelta(day)
         self.status = 1
 
