@@ -58,7 +58,7 @@ def open_inventory(path):
             try:
                 st.session_state.inventory()[i].refresh()
             except:
-                st.error("%s Buff id：%s 刷新失败，可能是token过期了，或者稍后重试或手动添加"%(st.session_state.inventory()[i].naem,st.session_state.inventory()[i].buff_id))
+                st.error("%s 刷新失败，可能是token过期了，或者稍后重试或手动添加"%(st.session_state.inventory()[i].name))
         progress_bar.empty()
 
 
